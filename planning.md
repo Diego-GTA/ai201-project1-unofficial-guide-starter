@@ -1,122 +1,75 @@
-# Project 1 Planning: The Unofficial Guide
-
-> Write this document before you write any pipeline code.
-> Your spec and architecture diagram are what you'll use to direct AI tools (Claude, Copilot, etc.) to generate your implementation — the more specific they are, the more useful the generated code will be.
-> Update the Retrieval Approach and Chunking Strategy sections if you change your approach during implementation.
-> Update this file before starting any stretch features.
-
----
-
 ## Domain
 
-<!-- What domain did you choose? Why is this knowledge valuable and hard to find through official channels? -->
-
----
+Georgia Tech's official course catalog lists every course offered across departments, but it's hard to navigate — you can only browse one department at a time, and there's no way to ask cross-department questions like "which courses cover machine learning?" or "what should I take after finishing intro CS?" This system makes GT course knowledge searchable and answerable across 10 departments, helping students discover courses by topic and plan their academic paths without manually digging through each department page.
 
 ## Documents
 
-<!-- List your specific sources: URLs, subreddit names, forum threads, or file descriptions.
-     Aim for at least 10 sources that together cover different subtopics or perspectives within your domain. -->
+10 PDF files saved from the Georgia Tech course catalog (2025–2026 edition), one per department:
 
-| # | Source | Description | URL or location |
-|---|--------|-------------|-----------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-| 6 | | | |
-| 7 | | | |
-| 8 | | | |
-| 9 | | | |
-| 10 | | | |
+- `cs.pdf` — CS department: https://catalog.gatech.edu/coursesaz/cs/
+- `cse.pdf` — Computational Science & Engineering: https://catalog.gatech.edu/coursesaz/cse/
+- `ece.pdf` — Electrical & Computer Engineering: https://catalog.gatech.edu/coursesaz/ece/
+- `chem.pdf` — Chemistry: https://catalog.gatech.edu/coursesaz/chem/
+- `chbe.pdf` — Chemical & Biomolecular Engineering: https://catalog.gatech.edu/coursesaz/chbe/
+- `isye.pdf` — Industrial & Systems Engineering: https://catalog.gatech.edu/coursesaz/isye/
+- `cee.pdf` — Civil & Environmental Engineering: https://catalog.gatech.edu/coursesaz/cee/
+- `cos.pdf` — College of Sciences: https://catalog.gatech.edu/coursesaz/cos/
+- `biol.pdf` — Biology: https://catalog.gatech.edu/coursesaz/biol/
+- `ae.pdf` — Aerospace Engineering: https://catalog.gatech.edu/coursesaz/ae/
 
----
+Each file contains course numbers, titles, credit hours, prerequisites, and full course descriptions for all courses in that department.
 
 ## Chunking Strategy
 
-<!-- How will you split documents into chunks?
-     State your chunk size (in tokens or characters), overlap size, and explain why those
-     numbers fit the structure of your documents.
-     A review-heavy corpus warrants different chunking than a long FAQ. -->
+Each course entry (number + title + description) is a natural, self-contained unit, so chunking follows document structure rather than fixed character counts — one chunk per course.
 
-**Chunk size:**
+Each chunk contains the course number, title, credit hours, prerequisites, and full description. Chunk size is approximately 100–300 tokens, with no overlap, because each course is logically bounded — there's no risk of a key fact spanning two courses.
 
-**Overlap:**
+This fits the documents because course descriptions are short (50–200 words each) and self-contained. Grouping multiple courses into one chunk would dilute retrieval: a query about "machine learning" might pull a chunk that also covers unrelated courses, giving the LLM noise to work through. Splitting a single course across two chunks would break the connection between its prerequisites and description, making answers incomplete. One course per chunk keeps retrieval precise.
 
-**Reasoning:**
-
----
+Chunks that are too small would look like: only the course number and title, no description — the LLM can't answer "what does this course cover?" Chunks that are too large would look like: three or four courses merged together — the LLM returns answers that mix information from multiple courses without clearly attributing which fact belongs to which.
 
 ## Retrieval Approach
 
-<!-- Which embedding model are you using (e.g., all-MiniLM-L6-v2 via sentence-transformers)?
-     How many chunks will you retrieve per query (top-k)?
-     If you were deploying this for real users and cost wasn't a constraint, what tradeoffs
-     would you weigh in choosing a different embedding model — context length, multilingual
-     support, accuracy on domain-specific text, latency? -->
+Embedding model: `all-MiniLM-L6-v2` via `sentence-transformers` — runs locally, no API key, no rate limits. Vector store: ChromaDB, also local.
 
-**Embedding model:**
+Top-k: 5 chunks per query. Five retrieved courses gives the LLM enough context to compare options and make a recommendation without overwhelming it. Too few (1–2) risks missing relevant courses when a query could match several. Too many (10+) fills the context window with marginally relevant results and increases the chance the LLM mixes up which facts came from which course.
 
-**Top-k:**
+Semantic search works here because students phrase questions differently than catalog text. A student asking "what covers neural networks?" won't match exact words in a description that says "deep learning, backpropagation, and convolutional architectures" — but the embeddings will be close in vector space because the concepts are related.
 
-**Production tradeoff reflection:**
-
----
+If deploying for real users with no cost constraint, the tradeoffs to consider would be: `text-embedding-3-large` (OpenAI) for higher accuracy on technical terminology; `bge-large-en` for a stronger open-source option with better retrieval benchmarks; and context length — all-MiniLM-L6-v2 maxes out at 256 tokens, which is fine for single course entries but would be a problem if chunks were larger. Multilingual support is not needed since all catalog content is in English.
 
 ## Evaluation Plan
 
-<!-- List your 5 test questions with their expected correct answers.
-     Questions should be specific enough that you can judge whether the system's response
-     is right or wrong. "What are good dining halls?" is too vague.
-     "What do students say about wait times at [dining hall name] during lunch?" is testable. -->
+1. **What CS courses cover machine learning?**
+   Expected: CS 4641 (Machine Learning) and CS 7641 at minimum, with descriptions mentioning classification, regression, or statistical learning.
 
-| # | Question | Expected answer |
-|---|----------|-----------------|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+2. **What are the prerequisites for CS 3600?**
+   Expected: CS 2110 and either MATH 3012 or CS 2051, as listed in the catalog entry for CS 3600.
 
----
+3. **Which departments offer courses on optimization?**
+   Expected: ISyE and CS at minimum (ISyE has multiple optimization courses; CS has CS 4540). Response should cite at least two departments with specific course numbers.
+
+4. **What AE courses are available at the 4000 level?**
+   Expected: A list of AE 4XXX courses drawn from the ae.pdf content, with titles and brief descriptions.
+
+5. **What should I take after intro programming if I'm interested in AI?**
+   Expected: Should recommend CS 2110 or CS 2340 as a next step, then CS 3600 or CS 4641 for AI — grounded in the prerequisite chains visible in the catalog, not general knowledge.
 
 ## Anticipated Challenges
 
-<!-- What could go wrong? Name at least two specific risks with reasoning.
-     Consider: noisy or inconsistent documents, missing source attribution, off-topic
-     retrieval, chunks that split key information across boundaries. -->
+**1. PDF extraction noise.** PDFs saved from the browser may contain navigation menus, page headers, footers, and boilerplate ("Georgia Tech Catalog," "2025–2026 Edition") mixed in with course content. If this text isn't stripped before chunking, some chunks will embed nav text instead of course descriptions, and retrieval will return garbage for those entries.
 
-1.
-
-2.
-
----
-
-## Architecture
-
-<!-- Draw a diagram of your pipeline showing the five stages:
-     Document Ingestion → Chunking → Embedding + Vector Store → Retrieval → Generation
-     Label each stage with the tool or library you're using.
-     You can use ASCII art, a Mermaid diagram, or embed a sketch as an image.
-     You'll use this diagram as context when prompting AI tools to implement each stage. -->
-
----
+**2. Course boundary detection.** The catalog doesn't use a perfectly consistent delimiter between courses across all departments. Detecting where one course ends and the next begins will likely require matching on course number patterns (e.g., a line starting with `CS 1234`). If the pattern fails on edge cases — cross-listed courses, special topics sections, or unusual formatting — chunks will either merge multiple courses or split one course mid-description, breaking retrieval for those entries.
 
 ## AI Tool Plan
 
-<!-- For each part of the pipeline below, describe:
-     - Which AI tool you plan to use (Claude, Copilot, ChatGPT, etc.)
-     - What you'll give it as input (which sections of this planning.md, which requirements)
-     - What you expect it to produce
-     - How you'll verify the output matches your spec
+- **PDF ingestion:** I'll give Claude the Documents section of this file and ask it to write a script using `pdfplumber` that opens each PDF, extracts text page by page, strips navigation boilerplate, and saves cleaned plain text to a `.txt` file per department.
 
-     "I'll use AI to help me code" is not a plan.
-     "I'll give Claude my Chunking Strategy section and ask it to implement chunk_text()
-     with my specified chunk size and overlap" is a plan. -->
+- **Chunking:** I'll give Claude the Chunking Strategy section plus a sample of the cleaned text from one department file and ask it to implement a `chunk_documents()` function that splits the text into one chunk per course using course number patterns (e.g., `^[A-Z]+ \d{4}`) as delimiters, with department and course number stored as metadata.
 
-**Milestone 3 — Ingestion and chunking:**
+- **Embedding + vector store:** I'll give Claude the Retrieval Approach section and ask it to write a script that embeds each chunk using `all-MiniLM-L6-v2` and upserts into a ChromaDB collection, storing department and course number as metadata fields.
 
-**Milestone 4 — Embedding and retrieval:**
+- **Generation:** I'll give Claude the Evaluation Plan section and ask it to write a `query_rag()` function that takes a user question, retrieves the top-5 chunks from ChromaDB, and sends them to Groq's `llama-3.3-70b-versatile` with a prompt that instructs it to answer using only the provided context and to cite the course number and department for every fact it uses.
 
-**Milestone 5 — Generation and interface:**
+- **Query interface:** I'll give Claude a description of a simple CLI loop and ask it to write a `main.py` that runs a `while True` input loop, calls `query_rag()`, and prints the answer and sources in a readable format.
